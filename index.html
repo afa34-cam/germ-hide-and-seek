@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Sour+Gummy">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Anta">
+<title>Germ Hide &amp; Seek</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: Poppins;
+  }
+  canvas {
+    display: block;
+    cursor: default;
+    /* The canvas scales to fit the viewport while keeping aspect ratio */
+    max-width: 100vw;
+    max-height: 100vh;
+  }
+  #credits {
+    position: fixed;
+    bottom: 6px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: 'Poppins', sans-serif;
+    font-size: 10px;
+    color: rgba(80,70,120,0.62);
+    pointer-events: none;
+    z-index: 10;
+    line-height: 1.5;
+  }
+  #credits a {
+    color: rgba(108,92,231,0.72);
+    text-decoration: none;
+    pointer-events: all;
+  }
+  #credits a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="credits">© 2026. Original card game developed by the <a target="_blank" href="https://www.teamtapbpr.co.uk">Team TAPBPR</a>. App version developed by <a target="_blank" href="https://www.altenburglab.com">Arwen Altenburg</a> using Claude (Sonnet 4.6) and Gemini (3 Flash).</div>
+<script>
+"use strict";
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                        STYLE CONFIGURATION                                  ║
+// ║  Edit anything in this block to change the look of the game.                ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+// ── Screen (logical size — the canvas scales automatically to fit any window) ──
+const SCREEN_W = 1250;
+const SCREEN_H = 800;
+
+// ── Colours (CSS strings) ────────────────────────────────────────────────────
+const C_BG            = "#F3F0FF";   // Soft lavender-white (inviting & fresh)
+const C_BG_DARK       = "#E9E2FF";   // Slightly deeper lavender for depth
+
+const C_PANEL_BG      = "#FFFFFF";   // Pure white for clean contrast
+const C_PANEL_BORDER  = "#D1C4E9";   // Gentle lilac border
+
+const C_PRIMARY       = "#6C5CE7";   // Vibrant "Blurple" (exciting & cool)
+const C_PRIMARY_DARK  = "#5849C4";   // Deep purple shadow
+const C_PRIMARY_LIGHT = "#A29BFE";   // Soft hover state
+
+const C_SECONDARY     = "#00CEC9";   // Bright Robin's egg teal (Phase 2 pop)
+const C_SECONDARY_LT  = "#81ECEC";   // Soft minty teal
+
+const C_ACCENT_LILAC  = "#A29BFE";   // Classic lilac accent
+const C_ACCENT_LILAC2 = "#EFEEFF";   // Very pale lilac for dividers
+
+const C_AMBER         = "#FAB1A0";   // Soft coral/peach for stars (cuter than yellow)
+const C_AMBER_DARK    = "#E17055";   // Burnt terracotta for readable text
+
+const C_GOOD          = "#55EFC4";   // Fresh mint green
+const C_BAD           = "#FF7675";   // Soft strawberry red
+
+const C_TEXT          = "#2D3436";   // Deep charcoal (softer than black)
+const C_TEXT_MED      = "#636E72";   // Muted slate gray
+const C_WHITE         = "#FFFFFF";
+const C_SHADOW        = "#2D343620"; // Subtle 12% opacity shadow
+
+// ── Floating background blobs ─────────────────────────────────────────────────
+// Each: { xSpeed, ySpeed, xAmp, yAmp, baseX, baseY, radius, color (rgba) }
+const BG_BLOBS = [
+  { xs:0.5, ys:0.3, xa:18, ya:12, bx:100,  by:120, r:28, col:"rgba(108, 92, 231, 0.10)" }, 
+  { xs:1.2, ys:0.7, xa:14, ya:20, bx:350,  by:680, r:22, col:"rgba(0, 206, 201, 0.08)" },
+  { xs:0.8, ys:1.1, xa:22, ya:10, bx:900,  by:150, r:18, col:"rgba(162, 155, 254, 0.12)" },
+  { xs:1.5, ys:0.4, xa:10, ya:18, bx:1100, by:600, r:26, col:"rgba(250, 177, 160, 0.09)" },
+  { xs:0.3, ys:1.3, xa:20, ya:14, bx:600,  by:700, r:20, col:"rgba(129, 236, 236, 0.10)" },
+  { xs:1.0, ys:0.9, xa:16, ya:22, bx:200,  by:400, r:16, col:"rgba(85, 239, 196, 0.07)" },
+  { xs:0.6, ys:0.5, xa:12, ya:16, bx:800,  by:500, r:24, col:"rgba(255, 118, 117, 0.06)" },
+  { xs:1.8, ys:1.0, xa:24, ya:8,  bx:500,  by:200, r:14, col:"rgba(162, 155, 254, 0.09)" },
+  { xs:0.4, ys:1.6, xa:8,  ya:20, bx:1050, by:350, r:20, col:"rgba(0, 206, 201, 0.07)" },
+  { xs:1.3, ys:0.2, xa:18, ya:14, bx:150,  by:650, r:18, col:"rgba(250, 177, 160, 0.11)" },
+];
+
+// ── Sparkles ──────────────────────────────────────────────────────────────────
+const SPARKLE_POSITIONS = [[180,90],[980,180],[60,500],[1140,400],[700,60],[400,750],[1050,700]];
+const SPARKLE_COLOR = C_AMBER;
+const SPARKLE_MIN_SIZE = 4;
+const SPARKLE_MAX_SIZE = 9;
+
+// ── Card layout ───────────────────────────────────────────────────────────────
+const CARD_SIZE        = 110;   // cards are square: CARD_SIZE × CARD_SIZE px
+const CARD_MARGIN      = 10;    // gap between cards
+const CARD_RADIUS      = 10;    // rounded corner radius on cards
+const CARD_COLS        = 10;    // number of columns in the grid
+const CARD_HOVER_SCALE = 1.10;  // how much cards grow on hover (1.0 = no grow)
+const CARD_SHADOW_ALPHA = 0.16; // card drop-shadow opacity
+
+// ── Fallback card colours (used when image files are missing) ─────────────────
+const FALLBACK_GERM_COLOURS = [
+  "#a0d2f0",  // pathogen 0 — sky blue
+  "#dc7878",  // pathogen 1 — coral
+  "#a0c882",  // pathogen 2 — sage
+  "#ffbe3c",  // pathogen 3 — amber
+  "#c3bedc",  // pathogen 4 — lilac
+];
+const FALLBACK_GERM_SHAPES = ["spiky","blob","round","fuzzy","cloud"];
+
+// ── HUD bar ───────────────────────────────────────────────────────────────────
+const HUD_HEIGHT   = 96;    // px tall
+const HUD_BG_ALPHA = 0.90;  // HUD background opacity
+
+// ── Fonts (CSS font-family strings, tried in order) ───────────────────────────
+// Feel free to replace with any Google Font or web-safe font.
+// To use a Google Font add a <link> tag in <head> then reference it here.
+const FONT_TITLE  = { family:"'Sour Gummy',cursive", size:40, bold:true  };
+const FONT_MID    = { family:"'Sour Gummy','Arial'", size:32, bold:false  };
+const FONT_BODY   = { family:"'Poppins',sans-serif",               size:16, bold:false };
+const FONT_BTN    = { family:"'Anta',cursive", size:20, bold:false  };
+const FONT_LABEL  = { family:"'Poppins',sans-serif",               size:14, bold:false };
+const FONT_HUD    = { family:"'Poppins',sans-serif",               size:15, bold:true  };
+const FONT_TIMER  = { family:"'Sour Gummy',cursive", size:28, bold:true  };
+const FONT_TIMERS = { family:"'Poppins',sans-serif",               size:13, bold:false };
+
+// ── Panels ────────────────────────────────────────────────────────────────────
+const PANEL_RADIUS       = 28;   // rounded corner radius for dialogue panels
+const PANEL_SHADOW_ALPHA = 0.14; // panel drop-shadow opacity
+
+// ── Buttons ───────────────────────────────────────────────────────────────────
+const BTN_RADIUS       = 15;   // rounded corner radius for big buttons
+const BTN_SMALL_RADIUS = 8;   // rounded corner radius for nav buttons
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+const BAR_HEIGHT = 12;
+const BAR_RADIUS = 6;
+
+// ── Timer display ─────────────────────────────────────────────────────────────
+const TIMER_RADIUS = 16;   // pill radius for the live timer widget
+
+// ── End-screen bar chart ──────────────────────────────────────────────────────
+const CHART_BAR_H   = 34;  // height of each comparison bar
+const CHART_BAR_GAP = 12;  // vertical gap between bars
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                     END OF STYLE CONFIGURATION                              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                       IMAGE ASSETS CONFIGURATION                            ║
+// ║  Replace any filename with your own PNG/JPG/SVG to reskin that element.     ║
+// ║  Set a value to null to use the built-in fallback art instead.              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+// ── Background / decoration ───────────────────────────────────────────────────
+// ── Card backs (face-down side) ───────────────────────────────────────────────
+// Used for ALL cards in Phase 1, and healthy cells in Phase 2.
+const ASSET_CARD_BACK = "mhc_empty.png";
+
+// ── Card fronts – healthy cells ───────────────────────────────────────────────
+const ASSET_HEALTHY   = "healthy.png";
+
+// ── Card fronts – pathogens (5 different germs, IDs 0-4) ─────────────────────
+const ASSET_FRONTS    = ["front_0.png","front_1.png","front_2.png","front_3.png","front_4.png"];
+
+// ── Phase-2 pathogen backs (MHC-presented antigen hint on the card back) ──────
+const ASSET_BACKS_P2  = ["back_0.png","back_1.png","back_2.png","back_3.png","back_4.png"];
+
+// ── Bouncing germ decoration images (Welcome & End screens) ──────────────────
+const ASSET_PATHS = ["path_0.png","path_1.png","path_2.png","path_3.png","path_4.png"];
+
+// ── Sound effects ─────────────────────────────────────────────────────────────
+// Use .ogg or .mp3. Set to null to silence that event.
+const SOUND_FLIP     = "[trimmed] flip.ogg";      // card flip
+const SOUND_PLOP     = "plop.ogg";      // healthy pair cleared
+const SOUND_MATCH    = "match.ogg";     // germ pair matched
+const SOUND_MISMATCH = "mismatch.ogg";  // cards don't match
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                    END OF IMAGE ASSETS CONFIGURATION                        ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+// ─── Game constants ───────────────────────────────────────────────────────────
+const TOTAL_PATHOGEN_PAIRS = 10;
+const TOTAL_HEALTHY_PAIRS  = 10;
+const STATE = { WELCOME:0, PHASE1:1, INTERMEZZO:2, PHASE2:3, END:4 };
+
+// ─── Canvas setup & scaling ──────────────────────────────────────────────────
+const canvas = document.getElementById("c");
+const ctx    = canvas.getContext("2d");
+
+// HiDPI support: draw at device pixel ratio so everything is sharp on retina screens
+const DPR = window.devicePixelRatio || 1;
+canvas.width  = SCREEN_W * DPR;
+canvas.height = SCREEN_H * DPR;
+ctx.scale(DPR, DPR);   // all game coordinates stay in logical (1250×800) space
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+
+let scale = 1, offsetX = 0, offsetY = 0;
+
+function resize() {
+  const ww = window.innerWidth, wh = window.innerHeight;
+  scale = Math.min(ww / SCREEN_W, wh / SCREEN_H);
+  // CSS size = logical game size × CSS scale factor (DPR already baked into canvas pixels)
+  canvas.style.width  = (SCREEN_W * scale) + "px";
+  canvas.style.height = (SCREEN_H * scale) + "px";
+  offsetX = (ww - SCREEN_W * scale) / 2;
+  offsetY = (wh - SCREEN_H * scale) / 2;
+  canvas.style.position = "fixed";
+  canvas.style.left = offsetX + "px";
+  canvas.style.top  = offsetY + "px";
+}
+window.addEventListener("resize", resize);
+resize();
+
+// Convert browser event coordinates → logical game coordinates
+function toGame(ex, ey) {
+  return [(ex - offsetX) / scale, (ey - offsetY) / scale];
+}
+
+// ─── Asset loading ────────────────────────────────────────────────────────────
+const images = {};
+function loadImage(key, src) {
+  if (!src) return;
+  const img = new Image();
+  img.src = src;
+  img.onload  = () => { images[key] = img; };
+  img.onerror = () => { /* use fallback */ };
+}
+loadImage("cardBack", ASSET_CARD_BACK);
+loadImage("healthy",  ASSET_HEALTHY);
+ASSET_FRONTS.forEach((s,i)  => loadImage("front"+i, s));
+ASSET_BACKS_P2.forEach((s,i)=> loadImage("back"+i,  s));
+ASSET_PATHS.forEach((s,i)   => loadImage("path"+i,  s));
+
+// Sound
+const sounds = {};
+function loadSound(key, src) {
+  if (!src) return;
+  const a = new Audio(src);
+  a.preload = "auto";
+  sounds[key] = a;
+}
+loadSound("flip",     SOUND_FLIP);
+loadSound("plop",     SOUND_PLOP);
+loadSound("match",    SOUND_MATCH);
+loadSound("mismatch", SOUND_MISMATCH);
+
+function playSound(key) {
+  const s = sounds[key];
+  if (!s) return;
+  try {
+    const clone = s.cloneNode();
+    clone.volume = 0.7;
+    clone.play().catch(()=>{});
+  } catch(e) {}
+}
+
+// ─── Math helpers ─────────────────────────────────────────────────────────────
+function lerp(a, b, t)  { return a + (b - a) * t; }
+function easeOut(t)     { t = Math.max(0,Math.min(1,t)); return 1-(1-t)**3; }
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+function lerpColor(c1, c2, t) {
+  const [r1,g1,b1] = typeof c1==="string" ? hexToRgb(c1) : c1;
+  const [r2,g2,b2] = typeof c2==="string" ? hexToRgb(c2) : c2;
+  t = Math.max(0,Math.min(1,t));
+  return `rgb(${Math.round(lerp(r1,r2,t))},${Math.round(lerp(g1,g2,t))},${Math.round(lerp(b1,b2,t))})`;
+}
+function fmtTime(ms) {
+  if (ms <= 0) return "0.0s";
+  const s = ms / 1000;
+  const m = Math.floor(s / 60);
+  if (m > 0) return `${m}:${(s - m*60).toFixed(1).padStart(4,"0")}`;
+  return s.toFixed(1) + "s";
+}
+function cssFont(spec) {
+  return `${spec.bold?"bold ":""}${spec.size}px ${spec.family}`;
+}
+
+// ─── Drawing primitives ───────────────────────────────────────────────────────
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h);
+  ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r);
+  ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+}
+
+function drawRoundRect(x, y, w, h, r, fill, stroke, lineWidth=2) {
+  roundRect(x,y,w,h,r);
+  if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+}
+
+function drawShadow(x, y, w, h, r, alpha=0.14, offset=6) {
+  ctx.save();
+  ctx.shadowColor   = `rgba(80,60,70,${alpha})`;
+  ctx.shadowBlur    = 12;
+  ctx.shadowOffsetX = offset/2;
+  ctx.shadowOffsetY = offset;
+  roundRect(x, y, w, h, r);
+  ctx.fillStyle = "rgba(0,0,0,0)";
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPanel(x, y, w, h, border, radius=PANEL_RADIUS, bg=C_PANEL_BG) {
+  drawShadow(x, y, w, h, radius, PANEL_SHADOW_ALPHA);
+  drawRoundRect(x, y, w, h, radius, bg);
+  // Top-left shine
+  ctx.save();
+  roundRect(x, y, w, h, radius);
+  ctx.clip();
+  const shine = ctx.createRadialGradient(x+w*0.25, y+h*0.15, 0, x+w*0.25, y+h*0.15, w*0.5);
+  shine.addColorStop(0, "rgba(255,255,255,0.18)");
+  shine.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = shine;
+  ctx.fill();
+  ctx.restore();
+  drawRoundRect(x, y, w, h, radius, null, border, 3);
+}
+
+function drawWavyBg(t) {
+  for (const b of BG_BLOBS) {
+    const cx = b.bx + Math.sin(t*b.xs + b.xs)*b.xa;
+    const cy = b.by + Math.cos(t*b.ys + b.ys)*b.ya;
+    ctx.beginPath();
+    ctx.arc(cx, cy, b.r, 0, Math.PI*2);
+    ctx.fillStyle = b.col;
+    ctx.fill();
+  }
+}
+
+function drawSparkles(t) {
+  for (let i = 0; i < SPARKLE_POSITIONS.length; i++) {
+    const [sx, sy] = SPARKLE_POSITIONS[i];
+    const phase = Math.sin(t*2.5 + i*1.1)*0.5 + 0.5;
+    const size  = SPARKLE_MIN_SIZE + phase*(SPARKLE_MAX_SIZE - SPARKLE_MIN_SIZE);
+    const alpha = 0.31 + phase*0.63;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = SPARKLE_COLOR;
+    ctx.lineWidth = 2;
+    for (const angle of [0,90,180,270]) {
+      const rad = angle*Math.PI/180;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + Math.cos(rad)*size, sy + Math.sin(rad)*size);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    for (const angle of [45,135,225,315]) {
+      const rad = angle*Math.PI/180;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + Math.cos(rad)*size*0.5, sy + Math.sin(rad)*size*0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// ─── Fallback card art ────────────────────────────────────────────────────────
+function drawGermFace(x, y, w, h, color, shape) {
+  const cx = x + w/2, cy = y + h/2;
+  const r  = Math.min(w, h) * 0.35;
+  ctx.save();
+  if (shape === "spiky") {
+    for (let a = 0; a < 360; a += 40) {
+      const rad = a*Math.PI/180;
+      ctx.beginPath();
+      ctx.arc(cx+Math.cos(rad)*(r+8), cy+Math.sin(rad)*(r+8), 5, 0, Math.PI*2);
+      ctx.fillStyle = lerpColor(color, "#fff", 0.25);
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  } else if (shape === "cloud") {
+    const lumps = [[-r/2,2,r/2+2],[r/2,2,r/2+2],[0,-r/4,r/2],[0,4,r]];
+    for (const [dx,dy,dr] of lumps) {
+      ctx.beginPath(); ctx.arc(cx+dx, cy+dy, dr, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    }
+  } else if (shape === "fuzzy") {
+    for (let a = 0; a < 360; a += 25) {
+      const rad  = a*Math.PI/180;
+      const bump = r + 5 + 3*Math.sin(a*0.7);
+      ctx.beginPath(); ctx.arc(cx+Math.cos(rad)*bump, cy+Math.sin(rad)*bump, 7, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  }
+  // Highlight
+  const hi = ctx.createRadialGradient(cx-r*0.3, cy-r*0.3, 0, cx, cy, r);
+  hi.addColorStop(0, "rgba(255,255,255,0.45)");
+  hi.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = hi; ctx.fill();
+  // Eyes
+  const ey = cy - r/5;
+  for (const ex of [cx-r/3, cx+r/3]) {
+    ctx.beginPath(); ctx.arc(ex, ey, Math.max(3,r/6), 0, Math.PI*2);
+    ctx.fillStyle = "#372a30"; ctx.fill();
+    ctx.beginPath(); ctx.arc(ex+1, ey-1, Math.max(1,r/10), 0, Math.PI*2);
+    ctx.fillStyle = "#fff"; ctx.fill();
+  }
+  // Smile
+  ctx.beginPath();
+  ctx.arc(cx, cy+r/8, r/3, 0, Math.PI);
+  ctx.strokeStyle = "#372a30"; ctx.lineWidth = 2; ctx.stroke();
+  // Cheeks
+  for (const ex of [cx-r/2, cx+r/2]) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath(); ctx.ellipse(ex, cy+r/10, r/4, r/8, 0, 0, Math.PI*2);
+    ctx.fillStyle = "#ff9b9b"; ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawCardImage(img, x, y, w, h) {
+  if (!img) return;
+  // Draw image letterboxed (aspect-ratio preserved, centred, no stretch)
+  const iw = img.naturalWidth  || img.width  || w;
+  const ih = img.naturalHeight || img.height || h;
+  const scale = Math.min(w / iw, h / ih);
+  const dw = iw * scale, dh = ih * scale;
+  const ox = x + (w - dw) / 2, oy = y + (h - dh) / 2;
+  ctx.drawImage(img, ox, oy, dw, dh);
+}
+
+function getImage(key) {
+  return images[key] || null;
+}
+
+// ─── UI widgets ───────────────────────────────────────────────────────────────
+function drawBigButton(x, y, w, h, label, mx, my, bg=C_PRIMARY, shadowCol=C_PRIMARY_DARK) {
+  const hover = mx>=x && mx<=x+w && my>=y && my<=y+h;
+  const ex = hover ? x-4 : x, ey = hover ? y-3 : y;
+  const ew = hover ? w+8 : w,  eh = hover ? h+6 : h;
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = shadowCol; ctx.shadowBlur = 0;
+  drawRoundRect(ex+2, ey+(hover?2:5), ew, eh, BTN_RADIUS, shadowCol);
+  ctx.restore();
+  drawRoundRect(ex, ey, ew, eh, BTN_RADIUS, bg);
+  // Shine
+  ctx.save();
+  roundRect(ex, ey, ew, eh, BTN_RADIUS); ctx.clip();
+  const sg = ctx.createLinearGradient(ex, ey, ex, ey+eh/2);
+  sg.addColorStop(0,"rgba(255,255,255,0.28)"); sg.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle = sg; ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.font = cssFont(FONT_BTN);
+  ctx.fillStyle = C_WHITE;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(label, ex+ew/2, ey+eh/2);
+  ctx.restore();
+  return hover;
+}
+
+function drawSmallButton(x, y, w, h, label, mx, my) {
+  const hover = mx>=x && mx<=x+w && my>=y && my<=y+h;
+  const ex = hover ? x-2 : x, ey = hover ? y-1 : y;
+  const ew = hover ? w+4 : w, eh = hover ? h+2 : h;
+  drawRoundRect(ex+1, ey+(hover?2:4), ew, eh, BTN_SMALL_RADIUS, C_SHADOW);
+  drawRoundRect(ex, ey, ew, eh, BTN_SMALL_RADIUS, hover?C_WHITE:C_BG_DARK, hover?C_PRIMARY_LIGHT:C_SHADOW, 2);
+  ctx.save();
+  ctx.font = cssFont(FONT_LABEL);
+  ctx.fillStyle = hover ? C_PRIMARY_DARK : C_TEXT;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(label, ex+ew/2, ey+eh/2);
+  ctx.restore();
+  return hover;
+}
+
+function drawLiveTimer(elapsed, cx, cy, label, color) {
+  ctx.save();
+  // Fixed box width — wide enough for "59:59.9" so it never resizes
+  const pad = 18;
+  const w   = 110;  // fixed width regardless of time string
+  const h   = FONT_TIMER.size + FONT_TIMERS.size + 20;
+  const px  = cx - w/2, py = cy - h/2;
+  drawShadow(px, py, w, h, TIMER_RADIUS, 0.11, 4);
+  drawRoundRect(px, py, w, h, TIMER_RADIUS, C_WHITE, color, 2);
+  ctx.font = cssFont(FONT_TIMERS); ctx.fillStyle = C_TEXT_MED;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText(label, cx, py+8);
+  ctx.font = cssFont(FONT_TIMER); ctx.fillStyle = color;
+  ctx.fillText(fmtTime(elapsed), cx, py+8+FONT_TIMERS.size+4);
+  ctx.restore();
+}
+
+function drawStatPill(label, value, color, cx, cy, w=180) {
+  ctx.save();
+  ctx.font = cssFont(FONT_LABEL);
+  const lh = FONT_LABEL.size;
+  ctx.font = cssFont(FONT_MID);
+  const vh = FONT_MID.size;
+  const h  = lh + vh + 16;
+  const px = cx - w/2, py = cy - h/2;
+  drawShadow(px, py, w, h, 14, 0.11, 4);
+  drawRoundRect(px, py, w, h, 14, C_WHITE, color, 2);
+  ctx.font = cssFont(FONT_LABEL); ctx.fillStyle = C_TEXT_MED;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText(label, cx, py+6);
+  ctx.font = cssFont(FONT_MID); ctx.fillStyle = color;
+  ctx.fillText(value, cx, py+6+lh+2);
+  ctx.restore();
+}
+
+function drawTimeBars(t1, t2, cx, topY, animT) {
+  const maxT = Math.max(t1, t2, 1);
+  const pw = 680, rows = [
+    ["Phase 1  (germs hidden)",            t1, C_PRIMARY,   0.00],
+    ["Phase 2  (germs presented by MHC)",  t2, C_SECONDARY, 0.25],
+  ];
+  const ph = (CHART_BAR_H + CHART_BAR_GAP + 18)*2 + 60;
+  drawPanel(cx-pw/2, topY, pw, ph, C_ACCENT_LILAC, 20);
+  ctx.save();
+  ctx.font = cssFont(FONT_BODY); ctx.fillStyle = C_TEXT;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("Round times", cx, topY+10);
+  for (let i=0; i<rows.length; i++) {
+    const [lbl, ms, col, delay] = rows[i];
+    const by = topY + 46 + i*(CHART_BAR_H+CHART_BAR_GAP+18);
+    ctx.font = cssFont(FONT_TIMERS); ctx.fillStyle = C_TEXT_MED;
+    ctx.textAlign = "left";
+    ctx.fillText(lbl, cx-pw/2+16, by);
+    const tx = cx-pw/2+16, tw = pw-32;
+    drawRoundRect(tx, by+18, tw, CHART_BAR_H, CHART_BAR_H/2, C_BG_DARK);
+    const prog = easeOut(Math.min(Math.max(animT-delay,0)*0.9, 1));
+    const fw = Math.max(CHART_BAR_H, (ms/maxT)*tw*prog);
+    drawRoundRect(tx, by+18, fw, CHART_BAR_H, CHART_BAR_H/2, col);
+    // Shine on bar
+    ctx.save();
+    roundRect(tx, by+18, fw, CHART_BAR_H/2, CHART_BAR_H/2);
+    ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,0.28)"; ctx.fill();
+    ctx.restore();
+    ctx.font = cssFont(FONT_TIMERS); ctx.fillStyle = C_WHITE;
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText(fmtTime(ms), tx+fw-10, by+18+CHART_BAR_H/2);
+  }
+  if (t1>0 && t2>0) {
+    let btxt, bcol;
+    if (t2 < t1) { const pct=Math.round((1-t2/t1)*100); btxt=`  ${pct}% faster with MHC!  `; bcol=C_AMBER_DARK; }
+    else         { btxt="  Keep practising — MHC usually speeds things up!  "; bcol=C_PRIMARY_DARK; }
+    ctx.font = cssFont(FONT_BODY);
+    const bw = ctx.measureText(btxt).width + 16;
+    const bh = FONT_BODY.size + 10;
+    const bx = cx - bw/2, by = topY+ph-bh-10;
+    drawRoundRect(bx, by, bw, bh, bh/2, bcol);
+    ctx.fillStyle = C_WHITE; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(btxt, cx, by+bh/2);
+  }
+  ctx.restore();
+}
+
+// ─── Card class ───────────────────────────────────────────────────────────────
+class Card {
+  constructor(p_id, frontImg, backImg, x, y, bornT) {
+    this.pathogenId  = p_id;
+    this.frontImg    = frontImg;
+    this.backImg     = backImg;
+    this.bx = x; this.by = y;  // base position (logical)
+    this.isFlipped   = false;
+    this.status      = "ACTIVE";
+    this.scale       = 1.0;
+    this.flashAlpha  = 0;
+    this.flashColor  = C_GOOD;
+    this.bornT       = bornT;
+  }
+
+  get baseRect() { return { x:this.bx, y:this.by, w:CARD_SIZE, h:CARD_SIZE }; }
+
+  update(mx, my, now) {
+    const hovering = mx>=this.bx && mx<=this.bx+CARD_SIZE && my>=this.by && my<=this.by+CARD_SIZE;
+    this.scale = lerp(this.scale, hovering ? CARD_HOVER_SCALE : 1.0, 0.14);
+    if (this.flashAlpha > 0) this.flashAlpha = Math.max(0, this.flashAlpha - 7);
+  }
+
+  containsPoint(mx, my) {
+    return mx>=this.bx && mx<=this.bx+CARD_SIZE && my>=this.by && my<=this.by+CARD_SIZE;
+  }
+
+  draw(t, now) {
+    if (this.status !== "ACTIVE") return;
+
+    const age = now - this.bornT;
+    const n   = Math.round(CARD_SIZE * this.scale);
+    const dx  = this.bx + CARD_SIZE/2 - n/2;
+    const dy  = this.by + CARD_SIZE/2 - n/2;
+
+    if (age < 280) {
+      const prog = easeOut(Math.max(0, age)/250);
+      ctx.save();
+      ctx.globalAlpha = prog;
+      drawCardImage(this.backImg, this.bx, this.by + (1-prog)*50, CARD_SIZE, CARD_SIZE);
+      ctx.restore();
+      return;
+    }
+
+    // Shadow
+    ctx.save();
+    ctx.shadowColor = `rgba(80,60,70,${CARD_SHADOW_ALPHA})`;
+    ctx.shadowBlur  = 8;
+    ctx.shadowOffsetY = 5;
+    roundRect(dx, dy, n, n, CARD_RADIUS);
+    ctx.fillStyle = "rgba(0,0,0,0)"; ctx.fill();
+    ctx.restore();
+
+    // Card image
+    ctx.save();
+    roundRect(dx, dy, n, n, CARD_RADIUS); ctx.clip();
+    drawCardImage(this.isFlipped ? this.frontImg : this.backImg, dx, dy, n, n);
+    ctx.restore();
+
+    // Hover ring
+    if (this.scale > 1.02) {
+      drawRoundRect(dx, dy, n, n, CARD_RADIUS, null, C_PRIMARY_LIGHT, 3);
+    }
+    // Flipped pulse ring
+    if (this.isFlipped) {
+      const pulse = 0.5 + 0.5*Math.sin(t*4);
+      const ringC = lerpColor(C_PRIMARY_LIGHT, C_PRIMARY_DARK, pulse);
+      drawRoundRect(dx, dy, n, n, CARD_RADIUS, null, ringC, 3);
+    }
+    // Flash overlay
+    if (this.flashAlpha > 0) {
+      const [r,g,b] = hexToRgb(this.flashColor);
+      ctx.save();
+      roundRect(dx, dy, n, n, CARD_RADIUS); ctx.clip();
+      ctx.fillStyle = `rgba(${r},${g},${b},${this.flashAlpha/255})`;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+// ─── Board setup ─────────────────────────────────────────────────────────────
+function setupBoard(isPhase2, cardBack, healthyFront, frontImgs, backImgsP2) {
+  // 5 pathogens × 4 copies + 20 healthy = 40 cards  (10 × 4 grid)
+  let ids = [];
+  for (let i=0;i<5;i++) for (let j=0;j<4;j++) ids.push(i);
+  for (let i=0;i<20;i++) ids.push(-1);
+  // Shuffle
+  for (let i=ids.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
+
+  const gridW  = CARD_COLS*(CARD_SIZE+CARD_MARGIN) - CARD_MARGIN;
+  const startX = (SCREEN_W - gridW)/2;
+  const nowMs  = performance.now();
+  const cards  = [];
+
+  ids.forEach((p_id, idx) => {
+    const col = idx % CARD_COLS, row = Math.floor(idx / CARD_COLS);
+    const x   = startX + col*(CARD_SIZE+CARD_MARGIN);
+    const y   = 200    + row*(CARD_SIZE+CARD_MARGIN);
+    let front, back;
+    if (p_id === -1) {
+      front = healthyFront;
+      back  = cardBack;
+    } else {
+      front = frontImgs[p_id];
+      back  = isPhase2 ? backImgsP2[p_id] : cardBack;
+    }
+    cards.push(new Card(p_id, front, back, x, y, nowMs + idx*16));
+  });
+  return cards;
+}
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+let state              = STATE.WELCOME;
+let cards              = [];
+let selected           = [];
+let pathogenPairsFound = 0;
+let healthyPairsFound  = 0;
+let flipBackT          = 0;
+let popMsg             = "";
+let popMsgT            = 0;
+let popScale           = 0;
+let phaseStartMs       = 0;
+let phase1TimeMs       = 0;
+let phase2TimeMs       = 0;
+let p1HealthyPairs     = 0;
+let p2HealthyPairs     = 0;
+let compareAnim        = 0;
+
+function resetTimer()    { phaseStartMs = performance.now(); }
+function elapsed()       { return performance.now() - phaseStartMs; }
+function resetCounters() { pathogenPairsFound = 0; healthyPairsFound = 0; }
+
+// Mouse state
+let mx = 0, my = 0;
+let clickX = 0, clickY = 0, clicked = false;
+
+canvas.addEventListener("mousemove", e => {
+  [mx, my] = toGame(e.clientX, e.clientY);
+});
+canvas.addEventListener("click", e => {
+  [clickX, clickY] = toGame(e.clientX, e.clientY);
+  clicked = true;
+});
+// Touch support
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  [mx, my] = toGame(t.clientX, t.clientY);
+  [clickX, clickY] = [mx, my];
+  clicked = true;
+}, { passive: false });
+canvas.addEventListener("touchmove", e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  [mx, my] = toGame(t.clientX, t.clientY);
+}, { passive: false });
+
+// ─── Main loop ────────────────────────────────────────────────────────────────
+function loop(nowMs) {
+  requestAnimationFrame(loop);
+  const t   = nowMs / 1000;
+  const now = nowMs;
+
+  // Resolve images each frame (they may load asynchronously)
+  const cardBack    = images["cardBack"]  || null;
+  const healthyFront= images["healthy"]   || null;
+  const frontImgs   = [0,1,2,3,4].map(i => images["front"+i] || null);
+  const backImgsP2  = [0,1,2,3,4].map(i => images["back"+i]  || null);
+  const pathImgs    = [0,1,2,3,4].map(i => images["path"+i]  || null);
+
+  // Clear
+  ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.fillStyle = C_BG; ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  drawWavyBg(t);
+
+  // ── WELCOME ─────────────────────────────────────────────────────────────────
+  if (state === STATE.WELCOME) {
+    // ── "Hide & Seek" cushion the germs bounce off ──
+    const cushionY = 190;
+    const cushionW = 800, cushionH = 38, cushionR = 19;
+    const cushionX = SCREEN_W/2 - cushionW/2;
+    // Subtle squash/stretch as if being sat on
+    const squash = 1 + Math.sin(t * 2.2) * 0.018;
+    ctx.save();
+    ctx.translate(SCREEN_W/2, cushionY + cushionH/2);
+    ctx.scale(squash, 2 - squash);
+    ctx.translate(-SCREEN_W/2, -(cushionY + cushionH/2));
+    // soft pill shadow
+    ctx.shadowColor = "rgba(108,92,231,0.18)";
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
+    drawRoundRect(cushionX, cushionY, cushionW, cushionH, cushionR,
+      "rgba(239,238,255,0.72)", "rgba(162,155,254,0.35)", 1.5);
+    ctx.shadowColor = "transparent";
+    ctx.font = "italic 500 22px 'Sour Gummy', cursive";
+    ctx.fillStyle = "rgba(108,92,231,0.38)";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("GERM Hide & Seek", SCREEN_W/2, cushionY + cushionH/2 + 1);
+    ctx.restore();
+
+    // Bouncing path germs as header (path_0.png … path_4.png)
+    const germSize    = 112;
+    const germSpacing = 170;
+    const germStartX  = SCREEN_W/2 - ((4)*germSpacing)/2;
+    const germBaseY   = 120;  // germs sit just above cushion
+    for (let i = 0; i < 5; i++) {
+      // bounce with a slight squash at bottom (simulating hitting cushion)
+      const rawBob = Math.sin(t * 2.2 + i * 1.1);
+      const bob = rawBob * 28;  // travel range
+      // squash at lowest point
+      const atBottom = (rawBob + 1) / 2;  // 0=top 1=bottom
+      const sx = 1 + atBottom * 0.12, sy = 1 - atBottom * 0.10;
+      const gx  = germStartX + i * germSpacing;
+      const gy  = germBaseY  - germSize / 2 + bob;
+      ctx.save();
+      const pImg = pathImgs[i];
+      if (pImg) {
+        const iw = pImg.naturalWidth || germSize;
+        const ih = pImg.naturalHeight || germSize;
+        const sc = Math.min(germSize/iw, germSize/ih);
+        const dw = iw*sc, dh = ih*sc;
+        ctx.translate(gx, gy + dh/2);
+        ctx.scale(sx, sy);
+        ctx.drawImage(pImg, -dw/2, -dh/2, dw, dh);
+      }
+      ctx.restore();
+    }
+
+    drawPanel(SCREEN_W/2-310, 270, 620, 180, C_PRIMARY_LIGHT);
+    ctx.save();
+    ctx.font = cssFont(FONT_MID); ctx.fillStyle = C_PRIMARY_DARK;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText("Find the germs hiding inside cells!", SCREEN_W/2, 280);
+    const lines = [
+      "Click a card to reveal a cell's contents, then find its pair.",
+      "If they don't match, the cards flip back over.",
+      "Can you clear the germs while leaving healthy cells alone?",
+    ];
+    ctx.font = cssFont(FONT_BODY); ctx.fillStyle = C_TEXT; ctx.textAlign = "center";
+    lines.forEach((l,i) => ctx.fillText(l, SCREEN_W/2, 340+i*28));
+    ctx.restore();
+
+    // START BUTTON
+    const bhover = drawBigButton(SCREEN_W/2-75, 480, 150, 56, "▶  PLAY", mx, my);
+    if (clicked && bhover) {
+      resetCounters();
+      cards = setupBoard(false, cardBack, healthyFront, frontImgs, backImgsP2);
+      resetTimer(); state = STATE.PHASE1;
+    }
+    drawSparkles(t);
+  }
+
+  // ── GAME PHASES ─────────────────────────────────────────────────────────────
+  else if (state === STATE.PHASE1 || state === STATE.PHASE2) {
+    // HUD
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${HUD_BG_ALPHA})`;
+    ctx.fillRect(0, 0, SCREEN_W, HUD_HEIGHT);
+    ctx.strokeStyle = C_PRIMARY_LIGHT; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0,HUD_HEIGHT); ctx.lineTo(SCREEN_W,HUD_HEIGHT); ctx.stroke();
+    ctx.restore();
+
+    // Nav buttons
+    const menuH = drawSmallButton(14, 12, 100, 32, "⌂ Home", mx, my);
+    let backH   = false;
+    if (state === STATE.PHASE2) backH = drawSmallButton(122, 12, 90, 32, "← Back", mx, my);
+    if (clicked) {
+      if (menuH) { state=STATE.WELCOME; resetCounters(); selected=[]; flipBackT=0; }
+      else if (backH) { state=STATE.INTERMEZZO; resetCounters(); selected=[]; flipBackT=0; }
+    }
+
+    // Phase label
+    ctx.save();
+    ctx.font = cssFont(FONT_HUD); ctx.fillStyle = C_PRIMARY_DARK;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText(state===STATE.PHASE1
+      ? ""
+      : "", SCREEN_W/2, 10);
+    ctx.restore();
+
+    // Timer
+    drawLiveTimer(elapsed(), SCREEN_W-96, HUD_HEIGHT/2,
+      state===STATE.PHASE1 ? "Phase 1" : "Phase 2",
+      state===STATE.PHASE1 ? C_PRIMARY_DARK : C_SECONDARY);
+
+    // Germ counter dots
+    ctx.save();
+    ctx.font = cssFont(FONT_LABEL);
+    const dotsLabelX = 220;
+    const dotsStartX = 420;   // fixed x for first dot — both rows align here
+    const dotRow1Y   = 40;    // vertical centre of germ dot row
+    const dotRow2Y   = 66;    // vertical centre of healthy dot row
+
+    ctx.fillStyle = C_AMBER; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("Germs caught:", dotsLabelX, dotRow1Y);
+    for (let i=0; i<TOTAL_PATHOGEN_PAIRS; i++) {
+      const filled = i < pathogenPairsFound;
+      ctx.beginPath(); ctx.arc(dotsStartX+i*19, dotRow1Y, 7, 0, Math.PI*2);
+      ctx.fillStyle = filled ? C_AMBER : C_SHADOW; ctx.fill();
+      if (filled) {
+        ctx.beginPath(); ctx.arc(dotsStartX+i*19-3, dotRow1Y-3, 3, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255,240,180,0.9)"; ctx.fill();
+      }
+    }
+
+    // Healthy counter dots
+    ctx.fillStyle = C_SECONDARY; ctx.textBaseline = "middle";
+    ctx.fillText("Healthy cells:", dotsLabelX, dotRow2Y);
+    for (let i=0; i<Math.min(healthyPairsFound+1, TOTAL_HEALTHY_PAIRS); i++) {
+      const filled = i < healthyPairsFound;
+      ctx.beginPath(); ctx.arc(dotsStartX+i*19, dotRow2Y, 7, 0, Math.PI*2);
+      ctx.fillStyle = filled ? C_SECONDARY : C_SHADOW; ctx.fill();
+      if (filled) {
+        ctx.beginPath(); ctx.arc(dotsStartX+i*19-3, dotRow2Y-3, 3, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(180,240,200,0.9)"; ctx.fill();
+      }
+    }
+    if (healthyPairsFound > 0) {
+      ctx.fillStyle = C_BAD; ctx.textBaseline = "middle";
+      ctx.fillText(`  Try to avoid healthy cells!`,
+        dotsStartX + Math.min(healthyPairsFound,18)*19 + 20, dotRow2Y);
+    }
+    ctx.restore();
+
+    // Hint
+    ctx.save();
+    ctx.font = cssFont(FONT_LABEL); ctx.fillStyle = C_TEXT_MED;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText("Tap a cell to peek inside!", SCREEN_W/2, HUD_HEIGHT+20);
+    ctx.restore();
+
+    // Cards
+    for (const c of cards) {
+      if (c.status !== "ACTIVE") continue;
+      c.update(mx, my, now);
+      c.draw(t, now);
+      if (clicked && c.containsPoint(clickX, clickY)
+          && selected.length < 2
+          && !c.isFlipped
+          && flipBackT === 0) {
+        c.isFlipped = true;
+        playSound("flip");   // immediate — no delay
+        selected.push(c);
+        if (selected.length === 2) flipBackT = now + 950;
+      }
+    }
+
+    // Match logic
+    if (flipBackT && now > flipBackT) {
+      const [a, b] = selected;
+      if (a.pathogenId === b.pathogenId) {
+        a.status = b.status = "CLEARED";
+        a.flashColor = b.flashColor = C_GOOD;
+        a.flashAlpha = b.flashAlpha = 220;
+        if (a.pathogenId === -1) {
+          healthyPairsFound++;
+          popMsg = "Healthy cell match — try to avoid them!";
+          popMsgT = now+1200; popScale=0;
+          playSound("plop");
+        } else {
+          pathogenPairsFound++;
+          popMsg = "Gotcha! Germ caught!";
+          popMsgT = now+1400; popScale=0;
+          playSound("match");
+        }
+      } else {
+        a.isFlipped = b.isFlipped = false;
+        a.flashColor = b.flashColor = C_BAD;
+        a.flashAlpha = b.flashAlpha = 160;
+        popMsg = "Not a match — try again!";
+        popMsgT = now+900; popScale=0;
+        playSound("mismatch");
+      }
+      selected = []; flipBackT = 0;
+    }
+
+    // Pop message
+    if (popMsg && now < popMsgT) {
+      popScale = Math.min(popScale+0.12, 1.0);
+      const sc    = easeOut(popScale);
+      const alpha = Math.min(1, (popMsgT-now)*0.12);
+      ctx.save();
+      ctx.font = `${FONT_MID.bold?"bold ":""}${Math.round(FONT_MID.size*sc)}px ${FONT_MID.family}`;
+      ctx.fillStyle = C_PRIMARY_DARK;
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(popMsg, SCREEN_W/2, HUD_HEIGHT+70);
+      ctx.restore();
+    }
+
+    // Phase complete
+    if (pathogenPairsFound === TOTAL_PATHOGEN_PAIRS) {
+      if (state === STATE.PHASE1) {
+        phase1TimeMs = elapsed(); p1HealthyPairs = healthyPairsFound;
+        state = STATE.INTERMEZZO;
+      } else {
+        phase2TimeMs = elapsed(); p2HealthyPairs = healthyPairsFound;
+        compareAnim = 0; state = STATE.END;
+      }
+      resetCounters();
+    }
+  }
+
+  // ── INTERMEZZO ──────────────────────────────────────────────────────────────
+  else if (state === STATE.INTERMEZZO) {
+    const px = SCREEN_W/2-420, py = 46;
+    drawPanel(px, py, 840, 650, C_ACCENT_LILAC);
+
+    const mH = drawSmallButton(px+16, py+16, 110, 30, "⌂ Home", mx, my);
+    if (clicked && mH) { state=STATE.WELCOME; resetCounters(); }
+
+    ctx.save();
+    ctx.font = cssFont(FONT_TITLE); ctx.fillStyle = C_PRIMARY_DARK;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("Well done!", SCREEN_W/2, 104);
+    ctx.restore();
+
+    drawStatPill("Time",         fmtTime(phase1TimeMs), C_ACCENT_LILAC,  SCREEN_W/2-200,     180);
+    drawStatPill("Germ pairs",           "10 / 10",              C_AMBER_DARK, SCREEN_W/2,     180);
+    drawStatPill("Healthy pairs opened", String(p1HealthyPairs), C_SECONDARY,   SCREEN_W/2+200,     180);
+
+    ctx.save();
+    ctx.strokeStyle = C_ACCENT_LILAC2; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px+60,230); ctx.lineTo(px+780,230); ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    const iLines = [
+      ["To help find hidden germs, our cells use MHC molecules.",         C_TEXT,         FONT_BODY],
+      ["These act like tiny windows, displaying bits of protein from the inside", C_TEXT,         FONT_BODY],
+      ["to show the immune system if a cell is healthy or infected.", C_TEXT,         FONT_BODY],
+      ["By scanning these MHC markers, your immune system can quickly spot and destroy pathogens.",    C_TEXT,         FONT_BODY],
+      ["",    C_TEXT,         FONT_BODY],
+      ["Ready to see the difference?",   C_SECONDARY,    FONT_HUD],
+    ];
+    iLines.forEach(([line, col, fnt], i) => {
+      ctx.font = cssFont(fnt); ctx.fillStyle = col;
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText(line, SCREEN_W/2, 280+i*36);
+    });
+    ctx.restore();
+
+    const bh = drawBigButton(SCREEN_W/2-75, 510, 150, 56, "▶  PLAY", mx, my,
+      C_SECONDARY, lerpColor(C_SECONDARY, "#28503a", 0.5));
+    if (clicked && bh) {
+      resetCounters();
+      cards = setupBoard(true, cardBack, healthyFront, frontImgs, backImgsP2);
+      resetTimer(); state = STATE.PHASE2;
+    }
+    drawSparkles(t);
+  }
+
+  // ── END ─────────────────────────────────────────────────────────────────────
+  else if (state === STATE.END) {
+    compareAnim += 1/60;
+    const px = SCREEN_W/2-430, py = 34;
+    drawPanel(px, py, 860, 716, C_SECONDARY);
+
+    const mH = drawSmallButton(px+16, py+16, 110, 30, "⌂ Home", mx, my);
+    if (clicked && mH) { state=STATE.WELCOME; resetCounters(); }
+
+    const bounce = Math.sin(t*2.5)*5;
+    ctx.save();
+    ctx.font = cssFont(FONT_TITLE); ctx.fillStyle = C_AMBER;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("Awesome!", SCREEN_W/2, 92+bounce);
+    ctx.restore();
+
+    drawTimeBars(phase1TimeMs, phase2TimeMs, SCREEN_W/2, 132, compareAnim);
+
+    // Stats table
+    const tabY  = 356;
+    const colXs = [SCREEN_W/2-290, SCREEN_W/2-80, SCREEN_W/2+110, SCREEN_W/2+310];
+    ctx.save();
+    // Stats table headers
+    [["Stat",C_TEXT_MED],["Phase 1",C_PRIMARY_DARK],["Phase 2",C_SECONDARY],["Improvement?",C_AMBER_DARK]]
+      .forEach(([l,c],i) => {
+        ctx.font = cssFont(FONT_HUD); ctx.fillStyle = c;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(l, colXs[i], tabY);
+      });
+    ctx.strokeStyle = C_BG_DARK; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(px+30,tabY+18); ctx.lineTo(px+830,tabY+18); ctx.stroke();
+
+    // Time row — smaller font, column colours: grey, purple, teal, amber
+    const FONT_STAT = { family:"'Poppins',sans-serif", size:14, bold:false };
+    [["Time",C_TEXT_MED],[fmtTime(phase1TimeMs),C_PRIMARY_DARK],[fmtTime(phase2TimeMs),C_SECONDARY]]
+      .forEach(([v,c],i) => {
+        ctx.font = cssFont(FONT_STAT); ctx.fillStyle = c;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(v, colXs[i], tabY+40);
+      });
+    const faster = phase2TimeMs < phase1TimeMs;
+    const pct    = Math.round((1-phase2TimeMs/Math.max(phase1TimeMs,1))*100);
+    ctx.font = cssFont(FONT_STAT); ctx.fillStyle = C_AMBER_DARK;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(faster ? `${pct}% faster!` : "Keep going!", colXs[3], tabY+40);
+
+    ctx.strokeStyle = C_BG_DARK; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(px+30,tabY+56); ctx.lineTo(px+830,tabY+56); ctx.stroke();
+
+    // Healthy cell pairs row — smaller font, column colours: grey, purple, teal, amber
+    [["Healthy cell pairs",C_TEXT_MED],[String(p1HealthyPairs),C_PRIMARY_DARK],[String(p2HealthyPairs),C_SECONDARY]]
+      .forEach(([v,c],i) => {
+        ctx.font = cssFont(FONT_STAT); ctx.fillStyle = c;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(v, colXs[i], tabY+74);
+      });
+    let bt2, bc2;
+    if (p2HealthyPairs<p1HealthyPairs)              { bt2=`${p1HealthyPairs-p2HealthyPairs} fewer!`; bc2=C_AMBER_DARK; }
+    else if (p2HealthyPairs===0&&p1HealthyPairs===0){ bt2="Perfect both rounds!"; bc2=C_AMBER_DARK; }
+    else if (p2HealthyPairs===p1HealthyPairs)       { bt2="Same"; bc2=C_AMBER_DARK; }
+    else                                             { bt2="More — try again!"; bc2=C_AMBER_DARK; }
+    ctx.font=cssFont(FONT_STAT); ctx.fillStyle=bc2;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(bt2, colXs[3], tabY+74);
+
+    ctx.strokeStyle = C_BG_DARK; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(px+30,tabY+92); ctx.lineTo(px+830,tabY+92); ctx.stroke();
+
+    [
+      ["Much faster, right?", C_PRIMARY_DARK,FONT_HUD],
+      ["Great work acting as your body’s defense system!",C_TEXT,        FONT_BODY],
+    ].forEach(([line,col,fnt],i) => {
+      ctx.font=cssFont(fnt); ctx.fillStyle=col;
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(line, SCREEN_W/2, tabY+118+i*26);
+    });
+    ctx.restore();
+
+    // Bouncing path germs (path_0.png … path_4.png) — aspect-ratio preserved
+    const eGermSize = 60;
+    const eGermSpan = 68;
+    const eGermX0   = SCREEN_W/2 - (4 * eGermSpan) / 2;
+    for (let i = 0; i < 5; i++) {
+      const bob  = Math.sin(t * 2.5 + i * 0.85) * 6;
+      const gcx  = eGermX0 + i * eGermSpan;
+      const gcy  = tabY + 192 + bob + eGermSize/2;
+      ctx.save();
+      const pImg = pathImgs[i];
+      if (pImg) {
+        ctx.translate(gcx, gcy);
+        const iw = pImg.naturalWidth || eGermSize;
+        const ih = pImg.naturalHeight || eGermSize;
+        const sc = Math.min(eGermSize/iw, eGermSize/ih);
+        ctx.drawImage(pImg, -iw*sc/2, -ih*sc/2, iw*sc, ih*sc);
+      }
+      ctx.restore();
+    }
+
+    const bh2 = drawBigButton(SCREEN_W/2-75, py+620, 150, 56, "Play Again!", mx, my);
+    if (clicked && bh2) {
+      phase1TimeMs=phase2TimeMs=0; p1HealthyPairs=p2HealthyPairs=0;
+      resetCounters();
+      cards = setupBoard(false, cardBack, healthyFront, frontImgs, backImgsP2);
+      resetTimer(); state=STATE.PHASE1;
+    }
+    drawSparkles(t);
+  }
+
+  // Reset click each frame
+  clicked = false;
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
