@@ -1,0 +1,15 @@
+{
+  "name": "Germ Hide & Seek",
+  "short_name": "Germ Hide & Seek",
+  "description": "A memory card game about how MHC molecules help the immune system find hidden germs.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F3F0FF",
+  "theme_color": "#F3F0FF",
+  "icons": [
+    { "src": "app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
