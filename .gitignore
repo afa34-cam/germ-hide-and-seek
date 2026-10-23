@@ -1,0 +1,11 @@
+# macOS folder metadata (lists file names; not needed on the website)
+.DS_Store
+
+# Local tooling / preview settings
+.claude/
+
+# Old build output from an earlier version of the game (Android .apk, caches)
+build/
+
+# Files prepared for uploading through the GitHub website
+upload-to-github/

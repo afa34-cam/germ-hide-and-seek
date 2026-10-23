@@ -535,9 +535,22 @@ const ASSET_PATHS = ["path_0.png","path_1.png","path_2.png","path_3.png","path_4
 // Each is a list of files tried in order (the .wav backups are for browsers
 // that can't play .ogg, e.g. older iPhones/iPads). Set to null to silence.
 const SOUND_FLIP     = ["[trimmed] flip.ogg", "flip.wav"];   // card flip
-const SOUND_PLOP     = ["plop.ogg", "plop.wav"];             // healthy pair cleared / germ tapped on home screen
+const SOUND_PLOP     = ["plop.ogg", "plop.wav"];             // healthy pair cleared
 const SOUND_MATCH    = ["match.ogg", "match.wav"];           // germ pair matched
 const SOUND_MISMATCH = ["mismatch.ogg", "mismatch.wav"];     // cards don't match
+
+// ── Germ tapped on the home screen: a speech bubble + its sound ─────────────────
+// Each tap picks one of these at random (never the same twice in a row).
+// These play quietly, just to accent the bubble.
+const FOUND_REACTIONS = [
+  { text: "You found me!",   sound: ["found-beep.mp3"]  },
+  { text: "Eek!",            sound: ["found-quack.wav"] },
+  { text: "Hee hee!",        sound: ["found-laugh.wav"] },
+  { text: "Oh no, spotted!", sound: ["found-ohh.wav"]   },
+  { text: "Wheee!",          sound: ["found-wee.wav"]   },
+];
+const GAME_SOUND_VOLUME  = 0.7;   // card flips, matches
+const FOUND_SOUND_VOLUME = 0.3;   // germ-tap accents on the home screen
 
 // ╔══════════════════════════════════════════════════════════════════════════════╗
 // ║                    END OF IMAGE ASSETS CONFIGURATION                        ║
@@ -704,11 +717,13 @@ async function loadSound(key, srcs) {
       const res = await fetch(encodeURI(src));
       if (!res.ok) continue;
       const data = await res.arrayBuffer();
-      sounds[key] = { buffer: await new Promise((ok, fail) => audioCtx.decodeAudioData(data, ok, fail)) };
+      const buffer = await new Promise((ok, fail) => audioCtx.decodeAudioData(data, ok, fail));
+      sounds[key] = { buffer, start: soundStart(buffer) };
       return;
     } catch (e) {
       const a = new Audio();
-      if (a.canPlayType(src.endsWith(".ogg") ? "audio/ogg" : "audio/wav")) {
+      const type = { ogg: "audio/ogg", wav: "audio/wav", mp3: "audio/mpeg" }[src.split(".").pop()];
+      if (type && a.canPlayType(type)) {
         a.src = src; a.preload = "auto";
         sounds[key] = { el: a };
         return;
@@ -720,25 +735,39 @@ loadSound("flip",     SOUND_FLIP);
 loadSound("plop",     SOUND_PLOP);
 loadSound("match",    SOUND_MATCH);
 loadSound("mismatch", SOUND_MISMATCH);
+FOUND_REACTIONS.forEach((r, i) => loadSound("found" + i, r.sound));
+
+// Where the sound actually begins: skips silence at the start of a file, so
+// every sound plays straight away when it's triggered
+function soundStart(buffer) {
+  const d = buffer.getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+  const threshold = peak * 0.05;            // ~26 dB below the loudest point
+  for (let i = 0; i < d.length; i++) {
+    if (Math.abs(d[i]) > threshold) return Math.max(0, i / buffer.sampleRate - 0.005);
+  }
+  return 0;
+}
 
 function unlockAudio() {
   if (audioCtx && audioCtx.state !== "running") audioCtx.resume().catch(()=>{});
 }
 
-function playSound(key) {
+function playSound(key, volume = GAME_SOUND_VOLUME) {
   const s = sounds[key];
   if (!s || soundMuted()) return;
   try {
     if (s.buffer) {
       const src  = audioCtx.createBufferSource();
       const gain = audioCtx.createGain();
-      gain.gain.value = 0.7;
+      gain.gain.value = volume;
       src.buffer = s.buffer;
       src.connect(gain).connect(audioCtx.destination);
-      src.start();
+      src.start(0, s.start);
     } else {
       const clone = s.el.cloneNode();
-      clone.volume = 0.7;
+      clone.volume = volume;
       clone.play().catch(()=>{});
     }
   } catch(e) {}
@@ -1063,11 +1092,26 @@ function drawBigButton(x, y, w, h, label, bg=C_PRIMARY, shadowCol=C_PRIMARY_DARK
   sg.addColorStop(0,"rgba(255,255,255,0.28)"); sg.addColorStop(1,"rgba(255,255,255,0)");
   ctx.fillStyle = sg; ctx.fill();
   ctx.restore();
+  // Label. A leading "▶" is drawn as a plain triangle shape rather than
+  // the character, which some phones/browsers turn into a coloured emoji.
   ctx.save();
-  fitFont(FONT_BTN, label, ew - 20, FONT_BTN.size * Math.max(L.big, L.font));
+  const play = label.startsWith("▶");
+  const text = play ? label.slice(1).trim() : label;
+  const fsz  = FONT_BTN.size * Math.max(L.big, L.font);
+  const tri  = play ? fsz * 0.62 : 0, triGap = play ? fsz * 0.5 : 0;
+  fitFont(FONT_BTN, text, ew - 20 - tri - triGap, fsz);
+  const tw = ctx.measureText(text).width;
+  const left = ex + (ew - (tri + triGap + tw)) / 2, midY = ey + eh/2 + 1;
   ctx.fillStyle = C_WHITE;
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(label, ex+ew/2, ey+eh/2+1);
+  if (play) {
+    ctx.beginPath();
+    ctx.moveTo(left, midY - tri*0.58);
+    ctx.lineTo(left + tri, midY);
+    ctx.lineTo(left, midY + tri*0.58);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText(text, left + tri + triGap, midY);
   ctx.restore();
   const pad = tapPad(h);
   return wasClicked(x - Math.min(pad, 10), y - pad, w + Math.min(pad, 10)*2, h + pad*2);
@@ -1233,7 +1277,7 @@ function drawTitle(lay) {
 // Germs take turns peeking over the top of the title. Tap one to "find" it.
 const PEEK_PERIOD = 7;     // seconds per peek cycle (each germ)
 const PEEK_ORDER  = [0, 3, 1, 4, 2];                   // who goes when
-const FOUND_LINES = ["You found me!", "Eek!", "Found me!", "Hee hee!", "Oh no, spotted!"];
+let lastReaction = -1;      // so the same reaction doesn't come twice in a row
 const welcomeGerms = [0,1,2,3,4].map(i => ({ foundT: -1e9, foundCycle: -1, rise: 0, cycle: -1, spot: i }));
 
 // New peek: pick a random spot not near a germ that's currently up
@@ -1321,8 +1365,12 @@ function drawPeekingGerms(lay, t, now, pathImgs) {
         && Math.abs(cxk - cx) < dw/2 + tapPad(visH) && cyk > top - tapPad(visH) && cyk < lineY + 10) {
       hit = () => {
         g.foundT = now; g.foundCycle = cycle; g.rise = r;
-        playSound("plop");
-        germBubbles.push({ text: FOUND_LINES[Math.floor(Math.random()*FOUND_LINES.length)], x: cx, y: top, t: now });
+        let k;
+        do { k = Math.floor(Math.random() * FOUND_REACTIONS.length); }
+        while (k === lastReaction && FOUND_REACTIONS.length > 1);
+        lastReaction = k;
+        playSound("found" + k, FOUND_SOUND_VOLUME);
+        germBubbles.push({ text: FOUND_REACTIONS[k].text, x: cx, y: top, t: now });
       };
     }
     // The green germ asks the question while it's up

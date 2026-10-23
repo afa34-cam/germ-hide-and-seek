@@ -49,6 +49,7 @@ flip.ogg / .wav     ← sound: card flip  ("[trimmed] flip.ogg" is used first)
 plop.ogg / .wav     ← sound: healthy pair cleared
 match.ogg / .wav    ← sound: germ pair matched
 mismatch.ogg / .wav ← sound: cards don't match
+found-*.wav / .mp3  ← germ tapped on the home screen (beep, quack, laugh, ohh, wee)
 fonts/              ← the game's fonts (.woff2) + their licences
 manifest.webmanifest ← lets phones/tablets add the game to the Home Screen
 app-icon-180.png    ← Home Screen icon (iPhone / iPad)
@@ -77,6 +78,7 @@ between the two `STYLE CONFIGURATION` banners.
 | Card spacing, corners, animations | `CARD_MARGIN`, `CARD_RADIUS`, `CARD_FLIP_MS`, … |
 | Version shown in the menu | `GAME_VERSION` |
 | Button sizes / smallest tap target on touch screens | `navW`, `navH`, `big` in `LAYOUTS`; `MIN_TAP_PX` |
+| Germ-tap bubbles + sounds, and how loud they play | `FOUND_REACTIONS`, `FOUND_SOUND_VOLUME` |
 | Home screen title, peeking germs, "How to play" steps | `TITLE_A`, `TITLE_B`, `TITLE_PEEK_AT`, `PEEK_*`, `FOUND_LINES`, `howToSteps()` |
 | Words + MHC picture on the in-between screen | `INTERMEZZO_TEXT`, `INTERMEZZO_READY`, `MHC_LEGEND` |
 | Background blobs | `BG_BLOBS` array |
